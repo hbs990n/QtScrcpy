@@ -58,10 +58,17 @@ KitkatViewer::KitkatViewer(const QString &serial, const QString &serverJarPath,
 
     m_serverProc = new QProcess(this);
 
+    // light reconnect: server already bound, just dial again
     m_retryTimer = new QTimer(this);
     m_retryTimer->setSingleShot(true);
     m_retryTimer->setInterval(1000);
-    connect(m_retryTimer, &QTimer::timeout, this, &KitkatViewer::beginSession);
+    connect(m_retryTimer, &QTimer::timeout, this, &KitkatViewer::attemptConnect);
+
+    // full restart: teardown + fresh server spawn (stream lost mid-session)
+    m_restartTimer = new QTimer(this);
+    m_restartTimer->setSingleShot(true);
+    m_restartTimer->setInterval(1000);
+    connect(m_restartTimer, &QTimer::timeout, this, &KitkatViewer::beginSession);
 }
 
 KitkatViewer::~KitkatViewer()
@@ -151,11 +158,26 @@ void KitkatViewer::beginSession()
     m_serverProc->start(m_adbPath, serverArgs);
 
     m_bannerDone = false;
+    m_sessionEstablished = false;
     m_buf.clear();
     m_retriesLeft = 30;
 
+    // NOTE: setup runs ONCE per session. Retrying must NOT come back here:
+    // pkill would murder the freshly spawned server before it ever binds.
+    // The device needs a few seconds to boot the VM and bind port 6612,
+    // meanwhile connections get accepted by adb and dropped - keep trying.
+    attemptConnect();
+}
+
+void KitkatViewer::attemptConnect()
+{
+    if (m_shuttingDown || m_videoSocket->state() == QAbstractSocket::ConnectingState) {
+        return;
+    }
     // connect the video socket first: the server pairs its accepts in order,
     // so the control socket must only be dialed after video is established
+    m_videoSocket->abort();
+    m_ctrlSocket->abort();
     m_videoSocket->connectToHost(QHostAddress::LocalHost, m_forwardPort);
 }
 
@@ -186,6 +208,7 @@ void KitkatViewer::applyBanner()
     m_buf.remove(0, BANNER_LENGTH); // keep the buffer pointing at the first chunk
     m_bannerDone = true;
     m_frameCount = 0;
+    m_sessionEstablished = true;
     logKitkat(QString("banner ok, device %1x%2").arg(m_deviceSize.width()).arg(m_deviceSize.height()));
 
     QSize winSize = m_deviceSize;
@@ -205,14 +228,22 @@ void KitkatViewer::onVideoDisconnected()
     if (m_shuttingDown) {
         return;
     }
+    const bool hadStream = m_sessionEstablished;
     m_bannerDone = false;
     m_buf.clear();
-    scheduleRetry(tr("video stream closed"));
+    if (hadStream) {
+        // the stream died mid-session: rebuild everything (the fork stops
+        // accepting after the two channels are taken)
+        scheduleRetry(tr("video stream lost, restarting"), true);
+    } else {
+        // server probably not bound yet: light reconnect, do NOT restart it
+        scheduleRetry(tr("video stream closed"), false);
+    }
 }
 
-void KitkatViewer::scheduleRetry(const QString &reason)
+void KitkatViewer::scheduleRetry(const QString &reason, bool fullRestart)
 {
-    if (m_shuttingDown || m_retryTimer->isActive()) {
+    if (m_shuttingDown || m_retryTimer->isActive() || m_restartTimer->isActive()) {
         return;
     }
     if (--m_retriesLeft <= 0) {
@@ -220,9 +251,11 @@ void KitkatViewer::scheduleRetry(const QString &reason)
         return;
     }
     logKitkat(QString("retry (%1 left): %2").arg(m_retriesLeft).arg(reason));
-    m_videoSocket->abort();
-    m_ctrlSocket->abort();
-    m_retryTimer->start();
+    if (fullRestart) {
+        m_restartTimer->start();
+    } else {
+        m_retryTimer->start();
+    }
 }
 
 void KitkatViewer::processBuffer()
@@ -421,6 +454,9 @@ void KitkatViewer::cleanup(bool removingForward)
     m_shuttingDown = true;
     if (m_retryTimer) {
         m_retryTimer->stop();
+    }
+    if (m_restartTimer) {
+        m_restartTimer->stop();
     }
     if (m_videoSocket) {
         m_videoSocket->abort();

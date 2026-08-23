@@ -43,12 +43,13 @@ private:
     bool runAdb(const QStringList &args, int timeoutMs = 10000);
     void cleanup(bool removingForward = true);
     void beginSession();
+    void attemptConnect();
     void onVideoConnected();
     void onCtrlConnected();
     void onVideoDisconnected();
     void onReadyRead();
     void processBuffer();
-    void scheduleRetry(const QString &reason);
+    void scheduleRetry(const QString &reason, bool fullRestart);
     void applyBanner();
     void logKitkat(const QString &message);
     void sendTouch(int action, const QPoint &widgetPos, quint16 pressure);
@@ -64,9 +65,11 @@ private:
     QTcpSocket *m_ctrlSocket = nullptr;
     QProcess *m_serverProc = nullptr;
     QTimer *m_retryTimer = nullptr;
+    QTimer *m_restartTimer = nullptr;
     int m_retriesLeft = 0;
     bool m_shuttingDown = false;
     bool m_touchActive = false;
+    bool m_sessionEstablished = false;
     int m_frameCount = 0;
 
     QByteArray m_buf;
