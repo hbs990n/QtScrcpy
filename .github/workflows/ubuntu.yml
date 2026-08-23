@@ -1,18 +1,6 @@
 name: Ubuntu
 on: 
   workflow_dispatch:
-  push:
-    paths:
-      - 'QtScrcpy/**'
-      - '!QtScrcpy/res/**'
-      - '.github/workflows/ubuntu.yml'
-      - 'ci/linux/**'
-  pull_request:
-    paths:
-      - 'QtScrcpy/**'
-      - '!QtScrcpy/res/**'
-      - '.github/workflows/ubuntu.yml'
-      - 'ci/linux/**'
 jobs:
   build:
     name: Build
