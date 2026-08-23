@@ -95,6 +95,7 @@ private:
     quint32 getBitRate();
     const QString &getServerPath();
     const QString &getKitkatServerPath();
+    QString findAdbExecutable();
     int getDeviceSdkLevel(const QString &serial);
     const QString &getServerPath(const QString &serial);
     void updateVideoSourceUi();

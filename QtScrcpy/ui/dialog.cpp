@@ -1351,6 +1351,27 @@ const QString &Dialog::getKitkatServerPath()
     return serverPath;
 }
 
+QString Dialog::findAdbExecutable()
+{
+    // 1. explicit user config
+    QString adbPath = Config::getInstance().getAdbPath();
+    if (!adbPath.isEmpty() && QFileInfo::exists(adbPath)) {
+        return adbPath;
+    }
+    // 2. next to the server file (AppImage layout: usr/lib/qtscrcpy/adb)
+    const QFileInfo modern(getServerPath());
+    QString candidate = modern.dir().filePath("adb");
+    if (QFileInfo::exists(candidate)) {
+        return candidate;
+    }
+    // 3. application dir, then whatever is in PATH
+    candidate = QCoreApplication::applicationDirPath() + "/adb";
+    if (QFileInfo::exists(candidate)) {
+        return candidate;
+    }
+    return "adb";
+}
+
 int Dialog::getDeviceSdkLevel(const QString &serial)
 {
     if (m_sdkCache.contains(serial)) {
@@ -1360,29 +1381,39 @@ int Dialog::getDeviceSdkLevel(const QString &serial)
     // assume a modern device when detection fails, so nothing changes
     // for existing users on Android >= 5
     int sdk = 21;
+    const QString adbExe = findAdbExecutable();
     if (!serial.isEmpty()) {
         QProcess adb;
-        adb.start(Config::getInstance().getAdbPath(),
+        adb.start(adbExe,
                   QStringList() << "-s" << serial << "shell" << "getprop" << "ro.build.version.sdk");
-        if (adb.waitForStarted(3000) && adb.waitForFinished(5000)) {
+        if (adb.waitForStarted(3000) && adb.waitForFinished(10000)) {
             bool ok = false;
             const int value = QString::fromUtf8(adb.readAllStandardOutput().trimmed()).toInt(&ok);
             if (ok && value > 0) {
                 sdk = value;
             }
+        } else {
+            outLog(tr("sdk detection failed to run adb: %1").arg(adbExe));
         }
     }
+    outLog(tr("device %1 sdk level: %2").arg(serial).arg(sdk));
     m_sdkCache.insert(serial, sdk);
     return sdk;
 }
 
 const QString &Dialog::getServerPath(const QString &serial)
 {
-    if (getDeviceSdkLevel(serial) >= 21) {
-        return getServerPath();
+    const bool modern = getDeviceSdkLevel(serial) >= 21;
+    if (!modern) {
+        outLog(tr("Android 4.x detected, using kitkat compatible server"));
     }
-    outLog(tr("Android 4.x detected, using kitkat compatible server"));
-    return getKitkatServerPath();
+    const QString &path = modern ? getServerPath() : getKitkatServerPath();
+    if (!QFileInfo::exists(path)) {
+        outLog(tr("server file missing: %1").arg(path));
+    } else {
+        outLog(tr("using server: %1 (%2 bytes)").arg(path).arg(QFileInfo(path).size()));
+    }
+    return path;
 }
 
 void Dialog::on_startAudioBtn_clicked()
