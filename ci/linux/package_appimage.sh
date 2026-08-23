@@ -122,6 +122,13 @@ if [ -f "$server_source" ]; then
     chmod +x "$appdir_path/usr/lib/qtscrcpy/scrcpy-server"
 fi
 
+# Copy the legacy kitkat-compatible server (Android 4.x devices)
+kitkat_server_source="$project_root/ci/linux/scrcpy-server-kitkat"
+if [ -f "$kitkat_server_source" ]; then
+    cp "$kitkat_server_source" "$appdir_path/usr/lib/qtscrcpy/scrcpy-server-kitkat"
+    chmod +x "$appdir_path/usr/lib/qtscrcpy/scrcpy-server-kitkat"
+fi
+
 # Process icon
 icon_file=""
 icon_source=""
