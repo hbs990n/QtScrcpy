@@ -129,6 +129,13 @@ if [ -f "$kitkat_server_source" ]; then
     chmod +x "$appdir_path/usr/lib/qtscrcpy/scrcpy-server-kitkat"
 fi
 
+# Copy the kitkat server native libraries (JPEG encoder deps pushed to the device)
+kitkat_libs_source="$project_root/ci/linux/scrcpy-server-kitkat-libs"
+if [ -d "$kitkat_libs_source" ]; then
+    mkdir -p "$appdir_path/usr/lib/qtscrcpy/scrcpy-server-kitkat-libs"
+    cp "$kitkat_libs_source"/*.so "$appdir_path/usr/lib/qtscrcpy/scrcpy-server-kitkat-libs/"
+fi
+
 # Process icon
 icon_file=""
 icon_source=""
@@ -254,6 +261,7 @@ export QTSCRCPY_ADB_PATH="$HERE/usr/lib/qtscrcpy/adb"
 export QTSCRCPY_SERVER_PATH="$HERE/usr/lib/qtscrcpy/scrcpy-server"
 export QTSCRCPY_KEYMAP_PATH="$HERE/usr/share/keymap"
 export QTSCRCPY_CONFIG_PATH="$HERE/usr/share/config"
+export QTSCRCPY_KITKAT_LIB_DIR="$HERE/usr/lib/qtscrcpy/scrcpy-server-kitkat-libs"
 exec "$HERE/usr/bin/QtScrcpy" "$@"
 APPRUN_EOF
 else
@@ -264,6 +272,7 @@ export QTSCRCPY_ADB_PATH="$HERE/usr/lib/qtscrcpy/adb"
 export QTSCRCPY_SERVER_PATH="$HERE/usr/lib/qtscrcpy/scrcpy-server"
 export QTSCRCPY_KEYMAP_PATH="$HERE/usr/share/keymap"
 export QTSCRCPY_CONFIG_PATH="$HERE/usr/share/config"
+export QTSCRCPY_KITKAT_LIB_DIR="$HERE/usr/lib/qtscrcpy/scrcpy-server-kitkat-libs"
 exec "$HERE/usr/bin/QtScrcpy" "$@"
 APPRUN_EOF
 fi
