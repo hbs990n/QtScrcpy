@@ -182,6 +182,8 @@ set(QC_UI_SOURCES
     ui/dialog.cpp
     ui/dialog.h
     ui/dialog.ui
+    ui/kitkatviewer.h
+    ui/kitkatviewer.cpp
     ui/encoderpreset.h
     ui/encoderpreset.cpp
     ui/presetconfigdialog.h
