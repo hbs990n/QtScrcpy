@@ -2,6 +2,7 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QMouseEvent>
@@ -379,7 +380,7 @@ void KitkatViewer::wheelEvent(QWheelEvent *event)
 {
     const int steps = event->angleDelta().y() / 120;
     if (steps != 0) {
-        sendScroll(event->pos(), steps > 0 ? 1 : -1);
+        sendScroll(event->position().toPoint(), steps > 0 ? 1 : -1);
     }
 }
 
