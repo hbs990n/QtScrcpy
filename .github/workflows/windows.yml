@@ -1,18 +1,8 @@
 name: Windows
 # 触发规则详解 https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#on
-on: 
-  push:
-    paths:
-      - 'QtScrcpy/**'
-      - '!QtScrcpy/res/**'
-      - '.github/workflows/windows.yml'
-      - 'ci/win**'
-  pull_request:
-    paths:
-      - 'QtScrcpy/**'
-      - '!QtScrcpy/res/**'
-      - '.github/workflows/windows.yml'
-      - 'ci/win**'
+# disabled: only manual trigger (Linux AppImage is the active build)
+on:
+  workflow_dispatch:
 jobs:
   build:
     name: Build

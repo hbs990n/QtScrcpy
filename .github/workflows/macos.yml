@@ -1,15 +1,7 @@
 name: MacOS
-on: 
-  push:
-    paths:
-      - 'QtScrcpy/**'
-      - '!QtScrcpy/res/**'
-      - '.github/workflows/macos.yml'
-  pull_request:
-    paths:
-      - 'QtScrcpy/**'
-      - '!QtScrcpy/res/**'
-      - '.github/workflows/macos.yml'
+# disabled: only manual trigger (Linux AppImage is the active build)
+on:
+  workflow_dispatch:
 jobs:
   build:
     name: Build
