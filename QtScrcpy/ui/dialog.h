@@ -27,6 +27,7 @@ class QLineEdit;
 class QCheckBox;
 class QGroupBox;
 class QPushButton;
+class KitkatViewer;
 class Dialog : public QWidget
 {
     Q_OBJECT
@@ -137,6 +138,7 @@ private:
     int m_prevMaxSizeIndex = 0;
     QPointer<PresetConfigDialog> m_presetDialog;
     QHash<QString, int> m_sdkCache;
+    QHash<QString, QPointer<KitkatViewer>> m_kitkatViewers;
 };
 
 #endif // DIALOG_H

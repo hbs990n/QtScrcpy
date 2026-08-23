@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include "dialog.h"
+#include "kitkatviewer.h"
 #include "ui_dialog.h"
 #include "videoform.h"
 #include "../groupcontroller/groupcontroller.h"
@@ -619,6 +620,27 @@ void Dialog::on_startServerBtn_clicked()
     qsc::DeviceParams params;
     params.serial = ui->serialBox->currentText().trimmed();
     params.maxSize = videoSize;
+
+    // Android 4.x devices cannot run the modern server protocol: use the
+    // built-in JPEG viewer driven by the kitkat-compatible server fork
+    if (getDeviceSdkLevel(params.serial) < 21) {
+        outLog(tr("Android 4.x detected, using built-in kitkat viewer"));
+        QPointer<KitkatViewer> viewer = m_kitkatViewers.value(params.serial);
+        if (!viewer) {
+            const QString serial = params.serial;
+            viewer = new KitkatViewer(serial, getServerPath(serial), findAdbExecutable());
+            connect(viewer, &QObject::destroyed, this, [this, serial]() {
+                m_kitkatViewers.remove(serial);
+            });
+            m_kitkatViewers.insert(serial, viewer);
+        }
+        viewer->show();
+        viewer->raise();
+        viewer->activateWindow();
+        viewer->start();
+        return;
+    }
+
     params.bitRate = getBitRate();
     // on devices with Android >= 10, the capture frame rate can be limited
     params.maxFps = static_cast<quint32>(Config::getInstance().getMaxFps());
