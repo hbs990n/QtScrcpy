@@ -325,6 +325,13 @@ if [ "$IS_DOCKER_OR_CI" = true ]; then
         cp -r "$qt_plugins_source/platforms"/* "$qt_plugins_target/platforms/" 2>/dev/null || true
     fi
 
+    # QImage::loadFromData("JPEG") loads the jpeg codec via plugin at runtime;
+    # deploy tools cannot see this dependency, so ship imageformats explicitly
+    if [ -d "$qt_plugins_source/imageformats" ]; then
+        mkdir -p "$qt_plugins_target/imageformats"
+        cp -r "$qt_plugins_source/imageformats"/* "$qt_plugins_target/imageformats/" 2>/dev/null || true
+    fi
+
     if [ -d "$qt_libs_source" ]; then
         mkdir -p "$qt_libs_target"
         for lib in "libQt5XcbQpa.so.5" "libQt5XcbQpa.so"; do
@@ -388,6 +395,18 @@ if [ "$IS_DOCKER_OR_CI" = true ]; then
             mkdir -p "$qt_platforms_dir"
             cp -r "$ENV_QT_PATH/gcc_64/plugins/platforms"/* "$qt_platforms_dir/" 2>/dev/null || true
         fi
+    fi
+
+    # the kitkat viewer needs the jpeg image plugin no matter what
+    qt_imageformats_dir="$qt_plugins_dir/imageformats"
+    if [ ! -f "$qt_imageformats_dir/libqjpeg.so" ]; then
+        mkdir -p "$qt_imageformats_dir"
+        cp "$ENV_QT_PATH/gcc_64/plugins/imageformats/libqjpeg.so"* "$qt_imageformats_dir/" 2>/dev/null || true
+    fi
+    if [ -f "$qt_imageformats_dir/libqjpeg.so" ]; then
+        echo "imageformats: libqjpeg.so present"
+    else
+        echo "warning: libqjpeg.so NOT deployed, kitkat viewer will show black frames"
     fi
 fi
 
