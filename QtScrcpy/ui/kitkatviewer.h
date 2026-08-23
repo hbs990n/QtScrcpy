@@ -20,6 +20,9 @@ class QTimer;
 class KitkatViewer : public QWidget
 {
     Q_OBJECT
+signals:
+    void logMessage(const QString &message);
+
 public:
     explicit KitkatViewer(const QString &serial, const QString &serverJarPath,
                           const QString &adbPath, QWidget *parent = nullptr);
@@ -47,6 +50,7 @@ private:
     void processBuffer();
     void scheduleRetry(const QString &reason);
     void applyBanner();
+    void logKitkat(const QString &message);
     void sendTouch(int action, const QPoint &widgetPos, quint16 pressure);
     void sendScroll(const QPoint &widgetPos, int vScroll);
     void sendKeycode(int keyCode);
@@ -63,6 +67,7 @@ private:
     int m_retriesLeft = 0;
     bool m_shuttingDown = false;
     bool m_touchActive = false;
+    int m_frameCount = 0;
 
     QByteArray m_buf;
     bool m_bannerDone = false;

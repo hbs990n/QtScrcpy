@@ -629,6 +629,9 @@ void Dialog::on_startServerBtn_clicked()
         if (!viewer) {
             const QString serial = params.serial;
             viewer = new KitkatViewer(serial, getServerPath(serial), findAdbExecutable());
+            connect(viewer, &KitkatViewer::logMessage, this, [this](const QString &msg) {
+                outLog(msg);
+            });
             connect(viewer, &QObject::destroyed, this, [this, serial]() {
                 m_kitkatViewers.remove(serial);
             });

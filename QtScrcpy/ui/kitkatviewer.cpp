@@ -75,12 +75,19 @@ void KitkatViewer::start()
     beginSession();
 }
 
+// report to the GUI log panel (and stderr) so failures are visible to users
+void KitkatViewer::logKitkat(const QString &message)
+{
+    emit logMessage(QString("[kitkat] %1").arg(message));
+    qWarning("kitkat viewer: %s", message.toUtf8().constData());
+}
+
 bool KitkatViewer::runAdb(const QStringList &args, int timeoutMs)
 {
     QProcess adb;
     adb.start(m_adbPath, args);
     if (!adb.waitForStarted(3000)) {
-        qWarning("kitkat viewer: failed to start adb: %s", m_adbPath.toUtf8().constData());
+        logKitkat(QString("failed to start adb: %1").arg(m_adbPath));
         return false;
     }
     if (!adb.waitForFinished(timeoutMs)) {
@@ -130,8 +137,9 @@ void KitkatViewer::beginSession()
         }
     }
     if (!libsOk) {
-        qWarning("kitkat viewer: missing native libs in %s", libDir.toUtf8().constData());
+        logKitkat(QString("missing native libs in %1").arg(libDir));
     }
+    logKitkat(QString("session start, forward port %1").arg(m_forwardPort));
 
     const QStringList serverArgs = QStringList() << "-s" << m_serial << "shell"
             << QString("CLASSPATH=%1 app_process / %2 -r 12 -Q 70 -P 480")
@@ -177,6 +185,8 @@ void KitkatViewer::applyBanner()
     m_deviceSize.setHeight(qFromLittleEndian<qint32>((const uchar *)m_buf.constData() + 18));
     m_buf.remove(0, BANNER_LENGTH); // keep the buffer pointing at the first chunk
     m_bannerDone = true;
+    m_frameCount = 0;
+    logKitkat(QString("banner ok, device %1x%2").arg(m_deviceSize.width()).arg(m_deviceSize.height()));
 
     QSize winSize = m_deviceSize;
     QScreen *screen = QGuiApplication::primaryScreen();
@@ -206,9 +216,10 @@ void KitkatViewer::scheduleRetry(const QString &reason)
         return;
     }
     if (--m_retriesLeft <= 0) {
-        qWarning("kitkat viewer: giving up: %s", reason.toUtf8().constData());
+        logKitkat(QString("giving up: %1").arg(reason));
         return;
     }
+    logKitkat(QString("retry (%1 left): %2").arg(m_retriesLeft).arg(reason));
     m_videoSocket->abort();
     m_ctrlSocket->abort();
     m_retryTimer->start();
@@ -233,7 +244,7 @@ void KitkatViewer::processBuffer()
             continue;
         }
         if (len <= 0 || len > (64 * 1024 * 1024)) {
-            qWarning("kitkat viewer: bogus chunk length %d, resync aborted", len);
+            logKitkat(QString("bogus chunk length %1").arg(len));
             m_buf.clear();
             return;
         }
@@ -242,8 +253,12 @@ void KitkatViewer::processBuffer()
         }
         QImage image;
         if (!image.loadFromData((const uchar *)m_buf.constData() + 4, len, "JPEG")) {
-            qWarning("kitkat viewer: bad JPEG frame (%d bytes)", len);
+            logKitkat(QString("JPEG decode failed (%1 bytes), Qt jpeg plugin missing?").arg(len));
         } else {
+            if (m_frameCount == 0) {
+                logKitkat(QString("first frame decoded %1x%2").arg(image.width()).arg(image.height()));
+            }
+            ++m_frameCount;
             m_image = image;
             update();
         }
