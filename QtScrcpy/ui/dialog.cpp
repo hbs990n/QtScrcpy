@@ -1,6 +1,7 @@
 ﻿#include <QDebug>
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -10,6 +11,7 @@
 #include <QKeyEvent>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QProcess>
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -644,7 +646,7 @@ void Dialog::on_startServerBtn_clicked()
     params.recordFile = ui->recordScreenCheck->isChecked();
     params.recordPath = ui->recordPathEdt->text().trimmed();
     params.recordFileFormat = ui->formatBox->currentText().trimmed();
-    params.serverLocalPath = getServerPath();
+    params.serverLocalPath = getServerPath(params.serial);
     params.serverRemotePath = Config::getInstance().getServerPath();
     params.pushFilePath = Config::getInstance().getPushFilePath();
     params.gameScript = camera ? QString() : getGameScript(ui->gameBox->currentText());
@@ -819,7 +821,7 @@ void Dialog::on_refreshCameraBtn_clicked()
             pushAdb->deleteLater();
         }
     });
-    pushAdb->push(serial, getServerPath(), Config::getInstance().getServerPath());
+    pushAdb->push(serial, getServerPath(serial), Config::getInstance().getServerPath());
 }
 
 void Dialog::on_refreshAppsBtn_clicked()
@@ -906,7 +908,7 @@ void Dialog::on_refreshAppsBtn_clicked()
             pushAdb->deleteLater();
         }
     });
-    pushAdb->push(serial, getServerPath(), Config::getInstance().getServerPath());
+    pushAdb->push(serial, getServerPath(serial), Config::getInstance().getServerPath());
 }
 
 void Dialog::on_stopServerBtn_clicked()
@@ -1327,6 +1329,60 @@ const QString &Dialog::getServerPath()
         }
     }
     return serverPath;
+}
+
+// Android 4.x devices need the legacy kitkat-compatible server
+const QString &Dialog::getKitkatServerPath()
+{
+    static QString serverPath;
+    if (serverPath.isEmpty()) {
+        serverPath = QString::fromLocal8Bit(qgetenv("QTSCRCPY_SERVER_PATH_KITKAT"));
+        QFileInfo envFile(serverPath);
+        if (serverPath.isEmpty() || !envFile.isFile()) {
+            // prefer a sibling of the modern server (AppImage layout: usr/lib/qtscrcpy/)
+            const QFileInfo modern(getServerPath());
+            QString candidate = modern.dir().filePath("scrcpy-server-kitkat");
+            if (!QFileInfo::exists(candidate)) {
+                candidate = QCoreApplication::applicationDirPath() + "/scrcpy-server-kitkat";
+            }
+            serverPath = candidate;
+        }
+    }
+    return serverPath;
+}
+
+int Dialog::getDeviceSdkLevel(const QString &serial)
+{
+    if (m_sdkCache.contains(serial)) {
+        return m_sdkCache.value(serial);
+    }
+
+    // assume a modern device when detection fails, so nothing changes
+    // for existing users on Android >= 5
+    int sdk = 21;
+    if (!serial.isEmpty()) {
+        QProcess adb;
+        adb.start(Config::getInstance().getAdbPath(),
+                  QStringList() << "-s" << serial << "shell" << "getprop" << "ro.build.version.sdk");
+        if (adb.waitForStarted(3000) && adb.waitForFinished(5000)) {
+            bool ok = false;
+            const int value = QString::fromUtf8(adb.readAllStandardOutput().trimmed()).toInt(&ok);
+            if (ok && value > 0) {
+                sdk = value;
+            }
+        }
+    }
+    m_sdkCache.insert(serial, sdk);
+    return sdk;
+}
+
+const QString &Dialog::getServerPath(const QString &serial)
+{
+    if (getDeviceSdkLevel(serial) >= 21) {
+        return getServerPath();
+    }
+    outLog(tr("Android 4.x detected, using kitkat compatible server"));
+    return getKitkatServerPath();
 }
 
 void Dialog::on_startAudioBtn_clicked()

@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QPointer>
+#include <QHash>
 #include <QMessageBox>
 #include <QMenu>
 #include <QSystemTrayIcon>
@@ -93,6 +94,9 @@ private:
     int findDeviceFromeSerialBox(bool wifi);
     quint32 getBitRate();
     const QString &getServerPath();
+    const QString &getKitkatServerPath();
+    int getDeviceSdkLevel(const QString &serial);
+    const QString &getServerPath(const QString &serial);
     void updateVideoSourceUi();
     void initAdvancedDisplayUi();
     void updateAdvancedDisplayUi();
@@ -131,6 +135,7 @@ private:
     quint32 m_prevBitRate = 2000000;
     int m_prevMaxSizeIndex = 0;
     QPointer<PresetConfigDialog> m_presetDialog;
+    QHash<QString, int> m_sdkCache;
 };
 
 #endif // DIALOG_H
