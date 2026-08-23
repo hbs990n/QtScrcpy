@@ -51,7 +51,9 @@ if [ $? -ne 0 ] ;then
     exit 1
 fi
 
-cmake --build . --config "$build_mode" -j8
+# -k (keep-going): compile every independent translation unit in one pass so
+# all errors surface together instead of stopping at the first failing file
+cmake --build . --config "$build_mode" -j8 -- -k
 if [ $? -ne 0 ] ;then
     echo "error: CMake build failed, exiting......"
     exit 1
