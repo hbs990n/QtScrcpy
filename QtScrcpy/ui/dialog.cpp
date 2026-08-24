@@ -625,10 +625,52 @@ void Dialog::on_startServerBtn_clicked()
     // built-in JPEG viewer driven by the kitkat-compatible server fork
     if (getDeviceSdkLevel(params.serial) < 21) {
         outLog(tr("Android 4.x detected, using built-in kitkat viewer"));
+
+        // map GUI options onto the kitkat server's limited flag set
+        const int maxSizeVal = ui->maxSizeBox->currentText().trimmed().toInt();
+        int scale = 360;
+        if (maxSizeVal >= 1080 || maxSizeVal == 0) {
+            scale = 1080;
+        } else if (maxSizeVal >= 720) {
+            scale = 720;
+        } else if (maxSizeVal >= 480) {
+            scale = 480;
+        }
+        const double mbps = ui->bitRateEdit->text().trimmed().toDouble() *
+                (ui->bitRateBox->currentText() == QString("Mbps") ? 1.0 : 0.001);
+        const int quality = qBound(35, static_cast<int>(mbps * 30.0 + 10.0), 95);
+        const int fps = qBound(1, Config::getInstance().getMaxFps(), 60);
+
+        QStringList unsupported;
+        if (ui->recordScreenCheck->isChecked()) {
+            unsupported << tr("record screen");
+        }
+        if (ui->closeScreenCheck->isChecked()) {
+            unsupported << tr("close screen");
+        }
+        if (ui->stayAwakeCheck->isChecked()) {
+            unsupported << tr("stay awake");
+        }
+        if (ui->useReverseCheck->isChecked()) {
+            unsupported << tr("reverse connection");
+        }
+        if (!unsupported.isEmpty()) {
+            outLog(tr("kitkat mode ignores: %1").arg(unsupported.join(", ")));
+        }
+
         QPointer<KitkatViewer> viewer = m_kitkatViewers.value(params.serial);
         if (!viewer) {
             const QString serial = params.serial;
-            viewer = new KitkatViewer(serial, getServerPath(serial), findAdbExecutable());
+            // 锁定方向为90°/270°时强制横屏布局
+            bool landscape = false;
+            if (ui->lockOrientationBox->currentIndex() > 0) {
+                const int deg = (ui->lockOrientationBox->currentIndex() - 1) * 90;
+                landscape = (deg % 180) != 0;
+            }
+            viewer = new KitkatViewer(serial, getServerPath(serial), findAdbExecutable(),
+                                      scale, quality, fps, landscape,
+                                      ui->alwaysTopCheck->isChecked(),
+                                      ui->framelessCheck->isChecked());
             connect(viewer, &KitkatViewer::logMessage, this, [this](const QString &msg) {
                 outLog(msg);
             });
@@ -636,7 +678,14 @@ void Dialog::on_startServerBtn_clicked()
                 m_kitkatViewers.remove(serial);
             });
             m_kitkatViewers.insert(serial, viewer);
+        } else {
+            // keep an existing window in sync with the current checkboxes
+            viewer->setWindowFlag(Qt::WindowStaysOnTopHint, ui->alwaysTopCheck->isChecked());
+            if (viewer->isVisible()) {
+                viewer->show();
+            }
         }
+        viewer->setFpsVisible(ui->fpsCheck->isChecked());
         viewer->show();
         viewer->raise();
         viewer->activateWindow();

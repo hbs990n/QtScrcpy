@@ -1,10 +1,13 @@
 #include "kitkatviewer.h"
 
+#include <QContextMenuEvent>
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QLabel>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScreen>
@@ -33,13 +36,26 @@ static const char *REMOTE_JAR = "/data/local/tmp/scrcpy-server-kitkat.jar";
 static const char *SERVER_CLASS = "com.genymobile.scrcpy.Server";
 
 KitkatViewer::KitkatViewer(const QString &serial, const QString &serverJarPath,
-                           const QString &adbPath, QWidget *parent)
+                           const QString &adbPath, int scale, int quality, int fps,
+                           bool landscape, bool stayOnTop, bool frameless, QWidget *parent)
     : QWidget(parent)
     , m_serial(serial)
     , m_serverJarPath(serverJarPath)
     , m_adbPath(adbPath)
+    , m_scale(scale)
+    , m_quality(quality)
+    , m_fps(fps)
+    , m_landscape(landscape)
+    , m_stayOnTop(stayOnTop)
+    , m_frameless(frameless)
 {
     setWindowTitle(QString("QtScrcpy-%1 [kitkat]").arg(m_serial));
+    if (m_stayOnTop) {
+        setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    }
+    if (m_frameless) {
+        setWindowFlag(Qt::FramelessWindowHint, true);
+    }
     setAttribute(Qt::WA_DeleteOnClose);
     setMouseTracking(true);
     setAutoFillBackground(true);
@@ -69,6 +85,35 @@ KitkatViewer::KitkatViewer(const QString &serial, const QString &serverJarPath,
     m_restartTimer->setSingleShot(true);
     m_restartTimer->setInterval(1000);
     connect(m_restartTimer, &QTimer::timeout, this, &KitkatViewer::beginSession);
+
+    m_fpsTimer = new QTimer(this);
+    m_fpsTimer->setInterval(1000);
+    connect(m_fpsTimer, &QTimer::timeout, this, &KitkatViewer::onFpsTick);
+}
+
+void KitkatViewer::setFpsVisible(bool visible)
+{
+    if (visible && !m_fpsLabel) {
+        m_fpsLabel = new QLabel(this);
+        m_fpsLabel->setStyleSheet("color: lime; background-color: rgba(0,0,0,120); padding: 2px;");
+        m_fpsLabel->move(6, 6);
+        m_fpsLabel->show();
+        m_fpsTimer->start();
+    } else if (!visible && m_fpsLabel) {
+        m_fpsLabel->deleteLater();
+        m_fpsLabel = nullptr;
+        m_fpsTimer->stop();
+    }
+}
+
+void KitkatViewer::onFpsTick()
+{
+    if (!m_fpsLabel) {
+        return;
+    }
+    const int delta = m_frameCount - m_lastFpsSample;
+    m_lastFpsSample = m_frameCount;
+    m_fpsLabel->setText(QString("%1 fps").arg(delta));
 }
 
 KitkatViewer::~KitkatViewer()
@@ -148,9 +193,11 @@ void KitkatViewer::beginSession()
     }
     logKitkat(QString("session start, forward port %1").arg(m_forwardPort));
 
-    const QStringList serverArgs = QStringList() << "-s" << m_serial << "shell"
-            << QString("CLASSPATH=%1 app_process / %2 -r 12 -Q 70 -P 480")
-                   .arg(REMOTE_JAR).arg(SERVER_CLASS);
+    const QString serverCmd = QString("CLASSPATH=%1 app_process / %2 -r %3 -Q %4 -P %5%6")
+            .arg(REMOTE_JAR).arg(SERVER_CLASS).arg(m_fps).arg(m_quality).arg(m_scale)
+            .arg(m_landscape ? " -L" : "");
+    const QStringList serverArgs = QStringList() << "-s" << m_serial << "shell" << serverCmd;
+    logKitkat(QString("server: %1").arg(serverCmd));
     if (m_serverProc->state() != QProcess::NotRunning) {
         m_serverProc->kill();
         m_serverProc->waitForFinished(2000);
@@ -314,14 +361,48 @@ void KitkatViewer::paintEvent(QPaintEvent *event)
     painter.drawImage(m_drawRect, m_image);
 }
 
-static QPoint toDeviceCoords(const QRect &drawRect, const QSize &deviceSize, const QPoint &widgetPos)
+QPoint KitkatViewer::toDevicePos(const QPoint &widgetPos) const
 {
-    if (drawRect.isEmpty()) {
+    if (m_drawRect.isEmpty()) {
         return QPoint();
     }
-    int x = (widgetPos.x() - drawRect.x()) * deviceSize.width() / drawRect.width();
-    int y = (widgetPos.y() - drawRect.y()) * deviceSize.height() / drawRect.height();
-    return QPoint(qBound(0, x, deviceSize.width() - 1), qBound(0, y, deviceSize.height() - 1));
+    int x = (widgetPos.x() - m_drawRect.x()) * m_deviceSize.width() / m_drawRect.width();
+    int y = (widgetPos.y() - m_drawRect.y()) * m_deviceSize.height() / m_drawRect.height();
+    return QPoint(qBound(0, x, m_deviceSize.width() - 1), qBound(0, y, m_deviceSize.height() - 1));
+}
+
+void KitkatViewer::toggleFullScreen()
+{
+    if (m_fullscreen) {
+        showNormal();
+        m_fullscreen = false;
+    } else {
+        showFullScreen();
+        m_fullscreen = true;
+    }
+}
+
+void KitkatViewer::contextMenuEvent(QContextMenuEvent *event)
+{
+    QMenu menu(this);
+    menu.addAction(tr("Back (Esc)"), this, [this]() { sendKeycode(4); });
+    menu.addAction(tr("Home"), this, [this]() { sendKeycode(3); });
+    menu.addAction(tr("Menu"), this, [this]() { sendKeycode(82); });
+    menu.addSeparator();
+    menu.addAction(tr("Volume +"), this, [this]() { sendKeycode(24); });
+    menu.addAction(tr("Volume -"), this, [this]() { sendKeycode(25); });
+    menu.addAction(tr("Power"), this, [this]() { sendKeycode(26); });
+    menu.addSeparator();
+    menu.addAction(m_fullscreen ? tr("Exit Fullscreen") : tr("Fullscreen"),
+                   this, &KitkatViewer::toggleFullScreen);
+    QAction *topAct = menu.addAction(tr("Stay on Top"), this, [this]() {
+        m_stayOnTop = !m_stayOnTop;
+        setWindowFlag(Qt::WindowStaysOnTopHint, m_stayOnTop);
+        show();
+    });
+    topAct->setCheckable(true);
+    topAct->setChecked(m_stayOnTop);
+    menu.exec(event->globalPos());
 }
 
 void KitkatViewer::sendTouch(int action, const QPoint &widgetPos, quint16 pressure)
@@ -329,7 +410,7 @@ void KitkatViewer::sendTouch(int action, const QPoint &widgetPos, quint16 pressu
     if (m_ctrlSocket->state() != QAbstractSocket::ConnectedState || !m_bannerDone) {
         return;
     }
-    const QPoint dev = toDeviceCoords(m_drawRect, m_deviceSize, widgetPos);
+    const QPoint dev = toDevicePos(widgetPos);
 
     QByteArray msg;
     msg.append(char(MSG_INJECT_TOUCH_EVENT));
@@ -357,7 +438,7 @@ void KitkatViewer::sendScroll(const QPoint &widgetPos, int vScroll)
     if (m_ctrlSocket->state() != QAbstractSocket::ConnectedState || !m_bannerDone) {
         return;
     }
-    const QPoint dev = toDeviceCoords(m_drawRect, m_deviceSize, widgetPos);
+    const QPoint dev = toDevicePos(widgetPos);
 
     QByteArray msg;
     msg.append(char(MSG_INJECT_SCROLL_EVENT));
@@ -403,6 +484,13 @@ void KitkatViewer::sendKeycode(int keyCode)
 
 void KitkatViewer::mousePressEvent(QMouseEvent *event)
 {
+    // with no title bar the top strip acts as the drag handle
+    if (m_frameless && event->button() == Qt::LeftButton && event->pos().y() <= 28) {
+        if (windowHandle()) {
+            windowHandle()->startSystemMove();
+        }
+        return;
+    }
     if (event->button() == Qt::LeftButton) {
         m_touchActive = true;
         sendTouch(AMOTION_ACTION_DOWN, event->pos(), PRESSURE_PRESSED);
@@ -436,7 +524,14 @@ void KitkatViewer::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_Escape:
-        sendKeycode(4); // KEYCODE_BACK
+        if (m_fullscreen) {
+            toggleFullScreen();
+        } else {
+            sendKeycode(4); // KEYCODE_BACK
+        }
+        return;
+    case Qt::Key_F11:
+        toggleFullScreen();
         return;
     case Qt::Key_Home:
         sendKeycode(3); // KEYCODE_HOME

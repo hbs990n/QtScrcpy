@@ -7,6 +7,8 @@
 #include <QTcpSocket>
 #include <QWidget>
 
+class QLabel;
+class QContextMenuEvent;
 class QTimer;
 
 // Built-in viewer for Android 4.x devices driven by the kitkat-compatible
@@ -24,13 +26,19 @@ signals:
     void logMessage(const QString &message);
 
 public:
+    // scale/quality/fps map onto the kitkat server flags -P/-Q/-r; the JPEG
+    // encoder has no bitrate concept, callers translate bitrate to quality
     explicit KitkatViewer(const QString &serial, const QString &serverJarPath,
-                          const QString &adbPath, QWidget *parent = nullptr);
+                          const QString &adbPath, int scale = 480, int quality = 70,
+                          int fps = 12, bool landscape = false, bool stayOnTop = false,
+                          bool frameless = false, QWidget *parent = nullptr);
     ~KitkatViewer() override;
 
     void start();
+    void setFpsVisible(bool visible);
 
 protected:
+    void contextMenuEvent(QContextMenuEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -52,6 +60,9 @@ private:
     void scheduleRetry(const QString &reason, bool fullRestart);
     void applyBanner();
     void logKitkat(const QString &message);
+    void toggleFullScreen();
+    void onFpsTick();
+    QPoint toDevicePos(const QPoint &widgetPos) const;
     void sendTouch(int action, const QPoint &widgetPos, quint16 pressure);
     void sendScroll(const QPoint &widgetPos, int vScroll);
     void sendKeycode(int keyCode);
@@ -60,6 +71,16 @@ private:
     QString m_serverJarPath;
     QString m_adbPath;
     quint16 m_forwardPort = 0;
+    int m_scale = 480;
+    int m_quality = 70;
+    int m_fps = 12;
+    bool m_landscape = false;
+    bool m_stayOnTop = false;
+    bool m_frameless = false;
+    bool m_fullscreen = false;
+    QLabel *m_fpsLabel = nullptr;
+    QTimer *m_fpsTimer = nullptr;
+    int m_lastFpsSample = 0;
 
     QTcpSocket *m_videoSocket = nullptr;
     QTcpSocket *m_ctrlSocket = nullptr;
