@@ -14,6 +14,7 @@
 #include <QTcpServer>
 #include <QTimer>
 #include <QtEndian>
+#include <QWindow>
 
 // kitkat server protocol constants
 static const quint16 KITKAT_SERVER_PORT = 6612;          // TCP port on the device
