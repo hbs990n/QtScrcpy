@@ -9,6 +9,8 @@
 
 class QLabel;
 class QContextMenuEvent;
+class QResizeEvent;
+class QToolButton;
 class QTimer;
 
 // Built-in viewer for Android 4.x devices driven by the kitkat-compatible
@@ -46,6 +48,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     bool runAdb(const QStringList &args, int timeoutMs = 10000);
@@ -62,6 +65,9 @@ private:
     void logKitkat(const QString &message);
     void toggleFullScreen();
     void onFpsTick();
+    void toggleScreenOff();
+    void buildToolbar();
+    void relayoutToolbar();
     QPoint toDevicePos(const QPoint &widgetPos) const;
     void sendTouch(int action, const QPoint &widgetPos, quint16 pressure);
     void sendScroll(const QPoint &widgetPos, int vScroll);
@@ -82,6 +88,8 @@ private:
     QLabel *m_fpsLabel = nullptr;
     QTimer *m_fpsTimer = nullptr;
     int m_lastFpsSample = 0;
+    QWidget *m_toolbar = nullptr;
+    QToolButton *m_screenBtn = nullptr;
 
     QTcpSocket *m_videoSocket = nullptr;
     QTcpSocket *m_ctrlSocket = nullptr;

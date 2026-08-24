@@ -9,6 +9,10 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QResizeEvent>
+#include <QToolButton>
+#include <QVBoxLayout>
+#include <functional>
 #include <QPainter>
 #include <QScreen>
 #include <QTcpServer>
@@ -78,6 +82,18 @@ KitkatViewer::KitkatViewer(const QString &serial, const QString &serverJarPath,
     m_ctrlSocket = new QTcpSocket(this);
 
     m_serverProc = new QProcess(this);
+    connect(m_serverProc, &QProcess::readyReadStandardOutput, this, [this]() {
+        const QString out = QString::fromUtf8(m_serverProc->readAllStandardOutput().trimmed());
+        if (!out.isEmpty()) {
+            logKitkat(QString("server: %1").arg(out));
+        }
+    });
+    connect(m_serverProc, &QProcess::readyReadStandardError, this, [this]() {
+        const QString err = QString::fromUtf8(m_serverProc->readAllStandardError().trimmed());
+        if (!err.isEmpty()) {
+            logKitkat(QString("server-err: %1").arg(err));
+        }
+    });
 
     // light reconnect: server already bound, just dial again
     m_retryTimer = new QTimer(this);
@@ -94,6 +110,71 @@ KitkatViewer::KitkatViewer(const QString &serial, const QString &serverJarPath,
     m_fpsTimer = new QTimer(this);
     m_fpsTimer->setInterval(1000);
     connect(m_fpsTimer, &QTimer::timeout, this, &KitkatViewer::onFpsTick);
+
+    buildToolbar();
+}
+
+void KitkatViewer::buildToolbar()
+{
+    if (m_toolbar) {
+        return;
+    }
+    m_toolbar = new QWidget(this);
+    m_toolbar->setStyleSheet("QWidget { background-color: rgba(20,20,20,180); border-radius: 6px; }"
+                             "QToolButton { background: transparent; color: white; border: none;"
+                             "  font-size: 14px; font-weight: bold; }"
+                             "QToolButton:hover { background: rgba(255,255,255,60); border-radius: 4px; }");
+    QVBoxLayout *lay = new QVBoxLayout(m_toolbar);
+    lay->setContentsMargins(4, 4, 4, 4);
+    lay->setSpacing(2);
+
+    const auto addBtn = [this, lay](const QString &text, std::function<void()> fn) {
+        QToolButton *btn = new QToolButton(m_toolbar);
+        btn->setText(text);
+        btn->setFixedSize(QSize(34, 34));
+        btn->setToolTip(text);
+        connect(btn, &QToolButton::clicked, this, [this, fn]() { fn(); });
+        lay->addWidget(btn);
+        return btn;
+    };
+    addBtn(tr("Back"), [this]() { sendKeycode(4); });
+    addBtn(tr("Home"), [this]() { sendKeycode(3); });
+    addBtn(tr("Menu"), [this]() { sendKeycode(82); });
+    addBtn(tr("Vol+"), [this]() { sendKeycode(24); });
+    addBtn(tr("Vol-"), [this]() { sendKeycode(25); });
+    addBtn(tr("Pwr"), [this]() { sendKeycode(26); });
+    m_screenBtn = addBtn(tr("ScrOff"), [this]() { toggleScreenOff(); });
+    addBtn(tr("Full"), [this]() { toggleFullScreen(); });
+
+    relayoutToolbar();
+    m_toolbar->raise();
+}
+
+void KitkatViewer::relayoutToolbar()
+{
+    if (!m_toolbar) {
+        return;
+    }
+    m_toolbar->adjustSize();
+    const QSize hint = m_toolbar->sizeHint();
+    m_toolbar->move(width() - hint.width() - 4, qMax(4, (height() - hint.height()) / 2));
+}
+
+void KitkatViewer::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    relayoutToolbar();
+}
+
+void KitkatViewer::toggleScreenOff()
+{
+    sendPowerMode(m_screenOff ? POWER_MODE_NORMAL : POWER_MODE_OFF);
+    m_screenOff = !m_screenOff;
+    if (m_screenBtn) {
+        m_screenBtn->setText(m_screenOff ? tr("Wake") : tr("ScrOff"));
+        m_screenBtn->setToolTip(m_screenOff ? tr("Wake Screen") : tr("Turn Screen Off"));
+    }
+    logKitkat(QString("screen power mode -> %1").arg(m_screenOff ? "OFF" : "ON"));
 }
 
 void KitkatViewer::setFpsVisible(bool visible)
@@ -394,10 +475,8 @@ void KitkatViewer::contextMenuEvent(QContextMenuEvent *event)
     menu.addAction(tr("Home"), this, [this]() { sendKeycode(3); });
     menu.addAction(tr("Menu"), this, [this]() { sendKeycode(82); });
     menu.addSeparator();
-    menu.addAction(m_screenOff ? tr("Wake Screen") : tr("Turn Screen Off (keep mirroring)"), this, [this]() {
-        sendPowerMode(m_screenOff ? POWER_MODE_NORMAL : POWER_MODE_OFF);
-        m_screenOff = !m_screenOff;
-    });
+    menu.addAction(m_screenOff ? tr("Wake Screen") : tr("Turn Screen Off (keep mirroring)"),
+                   this, &KitkatViewer::toggleScreenOff);
     menu.addSeparator();
     menu.addAction(tr("Volume +"), this, [this]() { sendKeycode(24); });
     menu.addAction(tr("Volume -"), this, [this]() { sendKeycode(25); });
