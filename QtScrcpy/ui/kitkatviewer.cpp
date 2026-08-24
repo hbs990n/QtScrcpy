@@ -31,6 +31,10 @@ static const int AMOTION_ACTION_DOWN = 0;
 static const int AMOTION_ACTION_UP = 1;
 static const int AMOTION_ACTION_MOVE = 2;
 
+// SurfaceControl display power modes used by the fork
+static const int POWER_MODE_OFF = 0;
+static const int POWER_MODE_NORMAL = 2;
+
 static const qint64 POINTER_ID_MOUSE = -1;               // generic pointer id accepted by the fork
 static const quint16 PRESSURE_PRESSED = 0xFFFF;
 static const char *REMOTE_JAR = "/data/local/tmp/scrcpy-server-kitkat.jar";
@@ -390,6 +394,11 @@ void KitkatViewer::contextMenuEvent(QContextMenuEvent *event)
     menu.addAction(tr("Home"), this, [this]() { sendKeycode(3); });
     menu.addAction(tr("Menu"), this, [this]() { sendKeycode(82); });
     menu.addSeparator();
+    menu.addAction(m_screenOff ? tr("Wake Screen") : tr("Turn Screen Off (keep mirroring)"), this, [this]() {
+        sendPowerMode(m_screenOff ? POWER_MODE_NORMAL : POWER_MODE_OFF);
+        m_screenOff = !m_screenOff;
+    });
+    menu.addSeparator();
     menu.addAction(tr("Volume +"), this, [this]() { sendKeycode(24); });
     menu.addAction(tr("Volume -"), this, [this]() { sendKeycode(25); });
     menu.addAction(tr("Power"), this, [this]() { sendKeycode(26); });
@@ -481,6 +490,17 @@ void KitkatViewer::sendKeycode(int keyCode)
     qint32 zeroUp = qToBigEndian<qint32>(0);
     up.append((const char *)&zeroUp, 4);
     m_ctrlSocket->write(up);
+}
+
+void KitkatViewer::sendPowerMode(int mode)
+{
+    if (m_ctrlSocket->state() != QAbstractSocket::ConnectedState) {
+        return;
+    }
+    QByteArray msg;
+    msg.append(char(9)); // MSG_SET_SCREEN_POWER_MODE
+    msg.append(char(mode));
+    m_ctrlSocket->write(msg);
 }
 
 void KitkatViewer::mousePressEvent(QMouseEvent *event)

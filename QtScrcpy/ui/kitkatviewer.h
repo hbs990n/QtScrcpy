@@ -66,6 +66,7 @@ private:
     void sendTouch(int action, const QPoint &widgetPos, quint16 pressure);
     void sendScroll(const QPoint &widgetPos, int vScroll);
     void sendKeycode(int keyCode);
+    void sendPowerMode(int mode);
 
     QString m_serial;
     QString m_serverJarPath;
@@ -91,6 +92,7 @@ private:
     bool m_shuttingDown = false;
     bool m_touchActive = false;
     bool m_sessionEstablished = false;
+    bool m_screenOff = false;
     int m_frameCount = 0;
 
     QByteArray m_buf;
