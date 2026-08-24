@@ -639,7 +639,13 @@ void Dialog::on_startServerBtn_clicked()
         const double mbps = ui->bitRateEdit->text().trimmed().toDouble() *
                 (ui->bitRateBox->currentText() == QString("Mbps") ? 1.0 : 0.001);
         const int quality = qBound(35, static_cast<int>(mbps * 30.0 + 10.0), 95);
-        const int fps = qBound(1, Config::getInstance().getMaxFps(), 60);
+        // ini default MaxFps=0 means "unlimited" for the modern server;
+        // the kitkat flag needs an explicit rate, so pick a sane fallback
+        int fps = Config::getInstance().getMaxFps();
+        if (fps <= 0) {
+            fps = 15;
+        }
+        fps = qBound(1, fps, 60);
 
         QStringList unsupported;
         if (ui->recordScreenCheck->isChecked()) {
