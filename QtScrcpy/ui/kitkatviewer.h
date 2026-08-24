@@ -72,7 +72,7 @@ private:
     void sendTouch(int action, const QPoint &widgetPos, quint16 pressure);
     void sendScroll(const QPoint &widgetPos, int vScroll);
     void sendKeycode(int keyCode);
-    void sendPowerMode(int mode);
+    bool adbShell(const QString &command, QString *output = nullptr);
 
     QString m_serial;
     QString m_serverJarPath;
@@ -90,6 +90,7 @@ private:
     int m_lastFpsSample = 0;
     QWidget *m_toolbar = nullptr;
     QToolButton *m_screenBtn = nullptr;
+    int m_savedBrightness = 0;
 
     QTcpSocket *m_videoSocket = nullptr;
     QTcpSocket *m_ctrlSocket = nullptr;

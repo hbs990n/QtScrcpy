@@ -35,10 +35,6 @@ static const int AMOTION_ACTION_DOWN = 0;
 static const int AMOTION_ACTION_UP = 1;
 static const int AMOTION_ACTION_MOVE = 2;
 
-// SurfaceControl display power modes used by the fork
-static const int POWER_MODE_OFF = 0;
-static const int POWER_MODE_NORMAL = 2;
-
 static const qint64 POINTER_ID_MOUSE = -1;               // generic pointer id accepted by the fork
 static const quint16 PRESSURE_PRESSED = 0xFFFF;
 static const char *REMOTE_JAR = "/data/local/tmp/scrcpy-server-kitkat.jar";
@@ -120,31 +116,31 @@ void KitkatViewer::buildToolbar()
         return;
     }
     m_toolbar = new QWidget(this);
-    m_toolbar->setStyleSheet("QWidget { background-color: rgba(20,20,20,180); border-radius: 6px; }"
+    m_toolbar->setStyleSheet("QWidget { background-color: rgba(20,20,20,200); border-radius: 8px; }"
                              "QToolButton { background: transparent; color: white; border: none;"
-                             "  font-size: 14px; font-weight: bold; }"
-                             "QToolButton:hover { background: rgba(255,255,255,60); border-radius: 4px; }");
+                             "  font-size: 14px; padding: 2px; }"
+                             "QToolButton:hover { background: rgba(255,255,255,60); border-radius: 6px; }");
     QVBoxLayout *lay = new QVBoxLayout(m_toolbar);
-    lay->setContentsMargins(4, 4, 4, 4);
-    lay->setSpacing(2);
+    lay->setContentsMargins(6, 6, 6, 6);
+    lay->setSpacing(4);
 
     const auto addBtn = [this, lay](const QString &text, std::function<void()> fn) {
         QToolButton *btn = new QToolButton(m_toolbar);
         btn->setText(text);
-        btn->setFixedSize(QSize(34, 34));
+        btn->setFixedSize(QSize(68, 34)); // wide enough for full labels
         btn->setToolTip(text);
         connect(btn, &QToolButton::clicked, this, [this, fn]() { fn(); });
         lay->addWidget(btn);
         return btn;
     };
-    addBtn(tr("Back"), [this]() { sendKeycode(4); });
-    addBtn(tr("Home"), [this]() { sendKeycode(3); });
-    addBtn(tr("Menu"), [this]() { sendKeycode(82); });
-    addBtn(tr("Vol+"), [this]() { sendKeycode(24); });
-    addBtn(tr("Vol-"), [this]() { sendKeycode(25); });
-    addBtn(tr("Pwr"), [this]() { sendKeycode(26); });
-    m_screenBtn = addBtn(tr("ScrOff"), [this]() { toggleScreenOff(); });
-    addBtn(tr("Full"), [this]() { toggleFullScreen(); });
+    addBtn(tr("返回"), [this]() { sendKeycode(4); });
+    addBtn(tr("主页"), [this]() { sendKeycode(3); });
+    addBtn(tr("菜单"), [this]() { sendKeycode(82); });
+    addBtn(tr("音量+"), [this]() { sendKeycode(24); });
+    addBtn(tr("音量-"), [this]() { sendKeycode(25); });
+    addBtn(tr("电源"), [this]() { sendKeycode(26); });
+    m_screenBtn = addBtn(tr("熄屏"), [this]() { toggleScreenOff(); });
+    addBtn(tr("全屏"), [this]() { toggleFullScreen(); });
 
     relayoutToolbar();
     m_toolbar->raise();
@@ -166,15 +162,44 @@ void KitkatViewer::resizeEvent(QResizeEvent *event)
     relayoutToolbar();
 }
 
+bool KitkatViewer::adbShell(const QString &command, QString *output)
+{
+    QProcess adb;
+    adb.start(m_adbPath, QStringList() << "-s" << m_serial << "shell" << command);
+    if (!adb.waitForStarted(3000) || !adb.waitForFinished(8000)) {
+        adb.kill();
+        adb.waitForFinished(2000);
+        return false;
+    }
+    if (output) {
+        *output = QString::fromUtf8(adb.readAllStandardOutput().trimmed());
+    }
+    return adb.exitStatus() == QProcess::NormalExit && adb.exitCode() == 0;
+}
+
+// Android 4.4 lacks SurfaceControl.setDisplayPowerMode (added in 5.0), so the
+// classic screen-off message cannot work here. Dim the backlight to zero
+// instead: rendering and capture continue, the panel just goes dark.
 void KitkatViewer::toggleScreenOff()
 {
-    sendPowerMode(m_screenOff ? POWER_MODE_NORMAL : POWER_MODE_OFF);
+    if (!m_screenOff) {
+        QString cur;
+        adbShell("settings get system screen_brightness", &cur);
+        bool ok = false;
+        const int value = cur.toInt(&ok);
+        m_savedBrightness = (ok && value > 0) ? value : 120;
+        adbShell("settings put system screen_brightness 0");
+        adbShell("svc power stayon true"); // avoid lockouts while watching
+        logKitkat(QString("screen dimmed (saved brightness %1)").arg(m_savedBrightness));
+    } else {
+        adbShell(QString("settings put system screen_brightness %1").arg(m_savedBrightness));
+        adbShell("svc power stayon false");
+        logKitkat(QString("screen restored (brightness %1)").arg(m_savedBrightness));
+    }
     m_screenOff = !m_screenOff;
     if (m_screenBtn) {
-        m_screenBtn->setText(m_screenOff ? tr("Wake") : tr("ScrOff"));
-        m_screenBtn->setToolTip(m_screenOff ? tr("Wake Screen") : tr("Turn Screen Off"));
+        m_screenBtn->setText(m_screenOff ? tr("亮屏") : tr("熄屏"));
     }
-    logKitkat(QString("screen power mode -> %1").arg(m_screenOff ? "OFF" : "ON"));
 }
 
 void KitkatViewer::setFpsVisible(bool visible)
@@ -569,17 +594,6 @@ void KitkatViewer::sendKeycode(int keyCode)
     qint32 zeroUp = qToBigEndian<qint32>(0);
     up.append((const char *)&zeroUp, 4);
     m_ctrlSocket->write(up);
-}
-
-void KitkatViewer::sendPowerMode(int mode)
-{
-    if (m_ctrlSocket->state() != QAbstractSocket::ConnectedState) {
-        return;
-    }
-    QByteArray msg;
-    msg.append(char(9)); // MSG_SET_SCREEN_POWER_MODE
-    msg.append(char(mode));
-    m_ctrlSocket->write(msg);
 }
 
 void KitkatViewer::mousePressEvent(QMouseEvent *event)
