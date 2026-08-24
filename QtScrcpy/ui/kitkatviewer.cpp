@@ -139,7 +139,6 @@ void KitkatViewer::buildToolbar()
     addBtn(tr("音量+"), [this]() { sendKeycode(24); });
     addBtn(tr("音量-"), [this]() { sendKeycode(25); });
     addBtn(tr("电源"), [this]() { sendKeycode(26); });
-    m_screenBtn = addBtn(tr("熄屏"), [this]() { toggleScreenOff(); });
     addBtn(tr("全屏"), [this]() { toggleFullScreen(); });
 
     relayoutToolbar();
@@ -160,46 +159,6 @@ void KitkatViewer::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     relayoutToolbar();
-}
-
-bool KitkatViewer::adbShell(const QString &command, QString *output)
-{
-    QProcess adb;
-    adb.start(m_adbPath, QStringList() << "-s" << m_serial << "shell" << command);
-    if (!adb.waitForStarted(3000) || !adb.waitForFinished(8000)) {
-        adb.kill();
-        adb.waitForFinished(2000);
-        return false;
-    }
-    if (output) {
-        *output = QString::fromUtf8(adb.readAllStandardOutput().trimmed());
-    }
-    return adb.exitStatus() == QProcess::NormalExit && adb.exitCode() == 0;
-}
-
-// Android 4.4 lacks SurfaceControl.setDisplayPowerMode (added in 5.0), so the
-// classic screen-off message cannot work here. Dim the backlight to zero
-// instead: rendering and capture continue, the panel just goes dark.
-void KitkatViewer::toggleScreenOff()
-{
-    if (!m_screenOff) {
-        QString cur;
-        adbShell("settings get system screen_brightness", &cur);
-        bool ok = false;
-        const int value = cur.toInt(&ok);
-        m_savedBrightness = (ok && value > 0) ? value : 120;
-        adbShell("settings put system screen_brightness 0");
-        adbShell("svc power stayon true"); // avoid lockouts while watching
-        logKitkat(QString("screen dimmed (saved brightness %1)").arg(m_savedBrightness));
-    } else {
-        adbShell(QString("settings put system screen_brightness %1").arg(m_savedBrightness));
-        adbShell("svc power stayon false");
-        logKitkat(QString("screen restored (brightness %1)").arg(m_savedBrightness));
-    }
-    m_screenOff = !m_screenOff;
-    if (m_screenBtn) {
-        m_screenBtn->setText(m_screenOff ? tr("亮屏") : tr("熄屏"));
-    }
 }
 
 void KitkatViewer::setFpsVisible(bool visible)
@@ -499,9 +458,6 @@ void KitkatViewer::contextMenuEvent(QContextMenuEvent *event)
     menu.addAction(tr("Back (Esc)"), this, [this]() { sendKeycode(4); });
     menu.addAction(tr("Home"), this, [this]() { sendKeycode(3); });
     menu.addAction(tr("Menu"), this, [this]() { sendKeycode(82); });
-    menu.addSeparator();
-    menu.addAction(m_screenOff ? tr("Wake Screen") : tr("Turn Screen Off (keep mirroring)"),
-                   this, &KitkatViewer::toggleScreenOff);
     menu.addSeparator();
     menu.addAction(tr("Volume +"), this, [this]() { sendKeycode(24); });
     menu.addAction(tr("Volume -"), this, [this]() { sendKeycode(25); });
