@@ -103,6 +103,7 @@ private:
     void initAdvancedDisplayUi();
     void updateAdvancedDisplayUi();
     void loadIpHistory();
+    void logDiag(const QString &message);
     void saveIpHistory(const QString &ip);
     void loadPortHistory();
     void savePortHistory(const QString &port);
