@@ -260,7 +260,15 @@ fi
 export QTSCRCPY_ADB_PATH="$HERE/usr/lib/qtscrcpy/adb"
 export QTSCRCPY_SERVER_PATH="$HERE/usr/lib/qtscrcpy/scrcpy-server"
 export QTSCRCPY_KEYMAP_PATH="$HERE/usr/share/keymap"
-export QTSCRCPY_CONFIG_PATH="$HERE/usr/share/config"
+# use a writable per-user config dir so settings survive restarts;
+# the bundled copy only seeds defaults on first launch
+QTSCRCPY_USER_CONFIG="$HOME/.config/QtScrcpy"
+mkdir -p "$QTSCRCPY_USER_CONFIG" 2>/dev/null \
+  || QTSCRCPY_USER_CONFIG="$HERE/usr/share/config"
+if [ -f "$HERE/usr/share/config/config.ini" ] && [ ! -f "$QTSCRCPY_USER_CONFIG/config.ini" ]; then
+    cp -f "$HERE/usr/share/config/"*.ini "$QTSCRCPY_USER_CONFIG/" 2>/dev/null
+fi
+export QTSCRCPY_CONFIG_PATH="$QTSCRCPY_USER_CONFIG"
 export QTSCRCPY_KITKAT_LIB_DIR="$HERE/usr/lib/qtscrcpy/scrcpy-server-kitkat-libs"
 exec "$HERE/usr/bin/QtScrcpy" "$@"
 APPRUN_EOF
@@ -271,7 +279,15 @@ HERE="$(dirname "$(readlink -f "${0}")")"
 export QTSCRCPY_ADB_PATH="$HERE/usr/lib/qtscrcpy/adb"
 export QTSCRCPY_SERVER_PATH="$HERE/usr/lib/qtscrcpy/scrcpy-server"
 export QTSCRCPY_KEYMAP_PATH="$HERE/usr/share/keymap"
-export QTSCRCPY_CONFIG_PATH="$HERE/usr/share/config"
+# use a writable per-user config dir so settings survive restarts;
+# the bundled copy only seeds defaults on first launch
+QTSCRCPY_USER_CONFIG="$HOME/.config/QtScrcpy"
+mkdir -p "$QTSCRCPY_USER_CONFIG" 2>/dev/null \
+  || QTSCRCPY_USER_CONFIG="$HERE/usr/share/config"
+if [ -f "$HERE/usr/share/config/config.ini" ] && [ ! -f "$QTSCRCPY_USER_CONFIG/config.ini" ]; then
+    cp -f "$HERE/usr/share/config/"*.ini "$QTSCRCPY_USER_CONFIG/" 2>/dev/null
+fi
+export QTSCRCPY_CONFIG_PATH="$QTSCRCPY_USER_CONFIG"
 export QTSCRCPY_KITKAT_LIB_DIR="$HERE/usr/lib/qtscrcpy/scrcpy-server-kitkat-libs"
 exec "$HERE/usr/bin/QtScrcpy" "$@"
 APPRUN_EOF
