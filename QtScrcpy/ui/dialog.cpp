@@ -1,5 +1,7 @@
 ﻿#include <QDebug>
 #include <QAbstractItemView>
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QCheckBox>
 #include <QDir>
 #include <QFile>
@@ -105,6 +107,9 @@ Dialog::Dialog(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
             break;
         case qsc::AdbProcess::AER_ERROR_EXEC:
             //log = m_adb.getErrorOut();
+            if (args.contains("connect")) {
+                m_pendingWirelessAddr.clear();
+            }
             if (args.contains("ifconfig") && args.contains("wlan0")) {
                 getIPbyIp();
             }
@@ -143,6 +148,21 @@ Dialog::Dialog(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
                     break;
                 }
                 ui->deviceIpEdt->setEditText(ip);
+            } else if (args.contains("connect")) {
+                // record the address only after a real successful connect
+                const QString stdOut = m_adb.getStdOut();
+                if (stdOut.contains("connected to") && !m_pendingWirelessAddr.isEmpty()) {
+                    const QStringList parts = m_pendingWirelessAddr.split(":");
+                    if (!parts.isEmpty() && !parts.first().isEmpty()) {
+                        saveIpHistory(parts.first());
+                    }
+                    if (parts.size() > 1 &&
+                        QRegularExpression("^\\d+$").match(parts.last()).hasMatch()) {
+                        savePortHistory(parts.last());
+                    }
+                    outLog(QString("wireless connected: %1").arg(m_pendingWirelessAddr), false);
+                }
+                m_pendingWirelessAddr.clear();
             }
             break;
         }
@@ -249,6 +269,10 @@ void Dialog::initUI()
 
     // 加载端口历史记录
     loadPortHistory();
+
+    // 下拉列表支持右键删除单条记录
+    ui->deviceIpEdt->view()->viewport()->installEventFilter(this);
+    ui->devicePortEdt->view()->viewport()->installEventFilter(this);
 
     // 为deviceIpEdt添加右键菜单
     if (ui->deviceIpEdt->lineEdit()) {
@@ -501,12 +525,6 @@ void Dialog::updateBootConfig(bool toView)
             if (config.startApp.isEmpty()) {
                 config.startApp = m_startAppBox->currentText().trimmed();
             }
-        }
-
-        // 保存当前IP到历史记录
-        QString currentIp = ui->deviceIpEdt->currentText().trimmed();
-        if (!currentIp.isEmpty()) {
-            saveIpHistory(currentIp);
         }
 
         Config::getInstance().setUserBootConfig(config);
@@ -1020,17 +1038,8 @@ void Dialog::on_wirelessConnectBtn_clicked()
         return;
     }
 
-    // 保存IP历史记录 - 只保存IP部分,不包含端口
-    QString ip = addr.split(":").first();
-    if (!ip.isEmpty()) {
-        saveIpHistory(ip);
-    }
-    
-    // 保存端口历史记录
-    QString port = addr.split(":").last();
-    if (!port.isEmpty() && port != ip) {
-        savePortHistory(port);
-    }
+    // 记录待确认地址：连接成功后才会写入历史
+    m_pendingWirelessAddr = addr;
 
     outLog("wireless connect...", false);
     QStringList adbArgs;
@@ -1728,4 +1737,38 @@ void Dialog::syncPresetLevelToUi()
     if (maxSizeIdx >= 0) {
         ui->maxSizeBox->setCurrentIndex(maxSizeIdx);
     }
+}
+
+bool Dialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ContextMenu) {
+        QComboBox *combo = nullptr;
+        bool isIp = false;
+        if (watched == ui->deviceIpEdt->view()->viewport()) {
+            combo = ui->deviceIpEdt;
+            isIp = true;
+        } else if (watched == ui->devicePortEdt->view()->viewport()) {
+            combo = ui->devicePortEdt;
+        }
+        if (combo) {
+            QContextMenuEvent *contextEvent = static_cast<QContextMenuEvent *>(event);
+            const QModelIndex index = combo->view()->indexAt(contextEvent->pos());
+            if (index.isValid()) {
+                const QString text = index.data(Qt::DisplayRole).toString();
+                QMenu menu(combo);
+                QAction *deleteAction = menu.addAction(tr("删除该条记录"));
+                if (menu.exec(contextEvent->globalPos()) == deleteAction) {
+                    if (isIp) {
+                        Config::getInstance().removeIpHistory(text);
+                        loadIpHistory();
+                    } else {
+                        Config::getInstance().removePortHistory(text);
+                        loadPortHistory();
+                    }
+                }
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }

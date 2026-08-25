@@ -112,10 +112,12 @@ private:
 
 protected:
     void closeEvent(QCloseEvent *event);
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     Ui::Widget *ui;
     qsc::AdbProcess m_adb;
+    QString m_pendingWirelessAddr; // wireless addr awaiting "adb connect" result
     QSystemTrayIcon *m_hideIcon;
     QGroupBox *m_advancedDisplayGroup = nullptr;
     QComboBox *m_displayModeBox = nullptr;
