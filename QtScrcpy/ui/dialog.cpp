@@ -151,16 +151,26 @@ Dialog::Dialog(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
             } else if (args.contains("connect")) {
                 // record the address only after a real successful connect
                 const QString stdOut = m_adb.getStdOut();
+                const QString errOut = m_adb.getErrorOut();
+                outLog(QString("[wireless] result args=[%1] stdout=\"%2\" stderr=\"%3\"")
+                       .arg(args.join(" "), stdOut.trimmed(), errOut.trimmed()), false);
                 if (stdOut.contains("connected to") && !m_pendingWirelessAddr.isEmpty()) {
                     const QStringList parts = m_pendingWirelessAddr.split(":");
+                    QString savedPort;
                     if (!parts.isEmpty() && !parts.first().isEmpty()) {
                         saveIpHistory(parts.first());
                     }
                     if (parts.size() > 1 &&
                         QRegularExpression("^\\d+$").match(parts.last()).hasMatch()) {
                         savePortHistory(parts.last());
+                        savedPort = parts.last();
                     }
-                    outLog(QString("wireless connected: %1").arg(m_pendingWirelessAddr), false);
+                    outLog(QString("[wireless] SUCCESS -> history saved ip=%1 port=%2")
+                           .arg(parts.value(0), savedPort), false);
+                } else {
+                    outLog(QString("[wireless] NOT saved (match=%1 pending=\"%2\")")
+                           .arg(stdOut.contains("connected to") ? "yes" : "no",
+                                m_pendingWirelessAddr), false);
                 }
                 m_pendingWirelessAddr.clear();
             }
@@ -1040,6 +1050,7 @@ void Dialog::on_wirelessConnectBtn_clicked()
 
     // 记录待确认地址：连接成功后才会写入历史
     m_pendingWirelessAddr = addr;
+    outLog(QString("[wireless] try connect: %1 (pending saved)").arg(addr), false);
 
     outLog("wireless connect...", false);
     QStringList adbArgs;
@@ -1541,6 +1552,7 @@ void Dialog::on_autoUpdatecheckBox_toggled(bool checked)
 void Dialog::loadIpHistory()
 {
     QStringList ipList = Config::getInstance().getIpHistory();
+    outLog(QString("[history] load ips (%1): %2").arg(ipList.size()).arg(ipList.join(", ")), false);
     ui->deviceIpEdt->clear();
     ui->deviceIpEdt->addItems(ipList);
     ui->deviceIpEdt->setContentsMargins(0, 0, 0, 0);
@@ -1556,9 +1568,11 @@ void Dialog::saveIpHistory(const QString &ip)
     if (ip.isEmpty()) {
         return;
     }
-    
+
     Config::getInstance().saveIpHistory(ip);
-    
+    outLog(QString("[history] ip saved: %1 (now %2 items)")
+           .arg(ip).arg(Config::getInstance().getIpHistory().size()), false);
+
     // 更新ComboBox
     loadIpHistory();
     ui->deviceIpEdt->setCurrentText(ip);
@@ -1583,6 +1597,7 @@ void Dialog::showIpEditMenu(const QPoint &pos)
 void Dialog::loadPortHistory()
 {
     QStringList portList = Config::getInstance().getPortHistory();
+    outLog(QString("[history] load ports (%1): %2").arg(portList.size()).arg(portList.join(", ")), false);
     ui->devicePortEdt->clear();
     ui->devicePortEdt->addItems(portList);
     ui->devicePortEdt->setContentsMargins(0, 0, 0, 0);
