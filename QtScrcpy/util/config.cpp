@@ -467,6 +467,14 @@ void Config::clearIpHistory()
     m_userData->sync();
 }
 
+void Config::removeIpHistory(const QString &ip)
+{
+    QStringList ipList = getIpHistory();
+    ipList.removeAll(ip);
+    m_userData->setValue(IP_HISTORY_KEY, ipList);
+    m_userData->sync();
+}
+
 void Config::savePortHistory(const QString &port)
 {
     QStringList portList = getPortHistory();
@@ -496,5 +504,13 @@ QStringList Config::getPortHistory()
 void Config::clearPortHistory()
 {
     m_userData->remove(PORT_HISTORY_KEY);
+    m_userData->sync();
+}
+
+void Config::removePortHistory(const QString &port)
+{
+    QStringList portList = getPortHistory();
+    portList.removeAll(port);
+    m_userData->setValue(PORT_HISTORY_KEY, portList);
     m_userData->sync();
 }

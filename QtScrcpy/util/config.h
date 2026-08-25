@@ -80,13 +80,15 @@ public:
 
     // IP history methods
     void saveIpHistory(const QString &ip);
-    QStringList getIpHistory(); 
+    QStringList getIpHistory();
     void clearIpHistory();
+    void removeIpHistory(const QString &ip);
 
     // Port history methods
     void savePortHistory(const QString &port);
-    QStringList getPortHistory(); 
+    QStringList getPortHistory();
     void clearPortHistory();
+    void removePortHistory(const QString &port);
 
 private:
     explicit Config(QObject *parent = nullptr);
